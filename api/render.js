@@ -1,18 +1,16 @@
 const ffmpegPath = require('@ffmpeg-installer/ffmpeg').path;
 const ffmpeg = require('fluent-ffmpeg');
 const path = require('path');
+const fs = require('fs'); // Added to handle temporary files
 ffmpeg.setFfmpegPath(ffmpegPath);
 
 export default async function handler(req, res) {
     const { name } = req.query;
-    
-    // Ensure we use path.resolve for absolute paths in the Vercel environment
     const videoPath = path.resolve(process.cwd(), 'public', 'assets', 'Eid.mp4');
     const fontPath = path.resolve(process.cwd(), 'public', 'assets', 'font.ttf');
-
-    // Set headers early to prepare for the download stream
-    res.setHeader('Content-Type', 'video/mp4');
-    res.setHeader('Content-Disposition', `attachment; filename="Enfactum_${name}.mp4"`);
+    
+    // Vercel allows writing to the /tmp folder
+    const outputPath = path.join('/tmp', `Enfactum_${Date.now()}.mp4`);
 
     ffmpeg(videoPath)
         .videoFilters({
@@ -27,23 +25,21 @@ export default async function handler(req, res) {
             }
         })
         .format('mp4')
-        .videoCodec('libx264') 
-        // Optimized for Speed: Use a faster preset to beat the 10-second Vercel limit
-        .outputOptions('-preset ultrafast') 
-        .on('start', (commandLine) => {
-            console.log('FFmpeg started with: ' + commandLine);
-        })
+        .videoCodec('libx264')
+        .outputOptions('-preset ultrafast')
         .on('error', (err, stdout, stderr) => {
-            // DETAILED LOGGING: This will appear in your Vercel Logs tab
-            console.error('FFmpeg Error:', err.message);
-            console.error('FFmpeg stderr output:', stderr);
-            
-            if (!res.headersSent) {
-                res.status(500).send(`Baking failed. Error: ${err.message}`);
-            }
+            console.error('FFmpeg Error:', stderr);
+            res.status(500).send('Error baking video');
         })
         .on('end', () => {
-            console.log('Baking finished successfully.');
+            // Once baking is finished, read the file and send it
+            const videoBuffer = fs.readFileSync(outputPath);
+            res.setHeader('Content-Type', 'video/mp4');
+            res.setHeader('Content-Disposition', `attachment; filename="Enfactum_${name}.mp4"`);
+            res.send(videoBuffer);
+            
+            // Clean up the temp file
+            fs.unlinkSync(outputPath);
         })
-        .pipe(res, { end: true }); 
+        .save(outputPath); // Save to temp storage first
 }
