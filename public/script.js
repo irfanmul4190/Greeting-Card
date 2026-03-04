@@ -65,4 +65,11 @@ btn.onclick = function() {
     btn.disabled = true;
 
     // Redirect to the /render route defined in vercel.json
-    window.location.href
+    window.location.href = `/render?name=${encodeURIComponent(name)}`;
+    
+    // Re-enable button after a short delay
+    setTimeout(() => {
+        btn.disabled = false;
+        btn.innerText = "Personalize & Download";
+    }, 5000);
+};
