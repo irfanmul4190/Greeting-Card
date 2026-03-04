@@ -6,10 +6,11 @@ ffmpeg.setFfmpegPath(ffmpegPath);
 export default async function handler(req, res) {
     const { name } = req.query;
     
-    // FIX: Updated paths to look inside 'public/assets'
-    const videoPath = path.join(process.cwd(), 'public', 'assets', 'Eid.mp4');
-    const fontPath = path.join(process.cwd(), 'public', 'assets', 'font.ttf');
+    // Ensure we use path.resolve for absolute paths in the Vercel environment
+    const videoPath = path.resolve(process.cwd(), 'public', 'assets', 'Eid.mp4');
+    const fontPath = path.resolve(process.cwd(), 'public', 'assets', 'font.ttf');
 
+    // Set headers early to prepare for the download stream
     res.setHeader('Content-Type', 'video/mp4');
     res.setHeader('Content-Disposition', `attachment; filename="Enfactum_${name}.mp4"`);
 
@@ -21,21 +22,28 @@ export default async function handler(req, res) {
                 fontfile: fontPath,
                 fontsize: 60,
                 fontcolor: 'white',
-                // Dynamic X: Center of width
                 x: '(w-text_w)/2',
-                // Dynamic Y: 10% up from the bottom
-                // 'h' is total height, 'th' is text height
                 y: 'h-(h*0.1)-th' 
             }
         })
         .format('mp4')
-        // Important for Vercel: specify the video codec for WhatsApp compatibility
         .videoCodec('libx264') 
-        .on('error', (err) => {
-            console.error('FFmpeg error:', err);
+        // Optimized for Speed: Use a faster preset to beat the 10-second Vercel limit
+        .outputOptions('-preset ultrafast') 
+        .on('start', (commandLine) => {
+            console.log('FFmpeg started with: ' + commandLine);
+        })
+        .on('error', (err, stdout, stderr) => {
+            // DETAILED LOGGING: This will appear in your Vercel Logs tab
+            console.error('FFmpeg Error:', err.message);
+            console.error('FFmpeg stderr output:', stderr);
+            
             if (!res.headersSent) {
-                res.status(500).send('Error baking video');
+                res.status(500).send(`Baking failed. Error: ${err.message}`);
             }
+        })
+        .on('end', () => {
+            console.log('Baking finished successfully.');
         })
         .pipe(res, { end: true }); 
 }
